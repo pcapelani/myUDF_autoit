@@ -18,8 +18,6 @@
 
 Global $g_aConfig
 __fFileCheck()
-;MsgBox (0,@UserProfileDir&"\AutoIt\sqlite3.dll",@ScriptDir&@CRLF&@WorkingDir&@CRLF&@LocalAppDataDir&@CRLF&@SystemDir&@CRLF&@WindowsDir)
-__fCreateDB ()
 
 Func __fFileCheck($sDestination = "") ;Check and if needed install dependencies like sqlite3.dll and sqlite3.dll to @TempDir&"\AutoIt\dependencies
 
@@ -58,20 +56,27 @@ EndFunc
 Func __fFileWriteConfig($sConfig = "",$sConfigValue = "") ; Write to config
 
 	If $sConfig = "" Or $sConfigValue = "" Then Return 0
-	$iArraySearch_dpath = _ArraySearch ($g_aConfig,"d_path")
+	Local $iArraySearch_dpath = _ArraySearch ($g_aConfig,"d_path")
 	If @error Then Exit MsgBox ($MB_SYSTEMMODAL,"@error: "&@error,"Auto It can not find d_path in config file")
+
 	$iArraySearch = _ArraySearch ($g_aConfig,$sConfig)
-	If @error Then FileWrite ($g_aConfig[$iArraySearch_dpath+1]&"config",@CRLF&$sConfig&@CRLF&$sConfigValue)
-	$g_aConfig = FileReadToArray ($g_aConfig[$iArraySearch_dpath+1]&"config")
-	Return 1
+	If @error Then
+		FileWrite ($g_aConfig[$iArraySearch_dpath+1]&"config",@CRLF&$sConfig&@CRLF&$sConfigValue)
+		$g_aConfig = FileReadToArray ($g_aConfig[$iArraySearch_dpath+1]&"config")
+		Return 1 ;Success
+	EndIf
+	Return 0 ;Config name already exists
 
 EndFunc
 
 Func __fCreateDB ($sDbName = "autoit.db") ;Create a new DB or check if a existing one is working
 
+	Local $iArraySearch_dpath = _ArraySearch ($g_aConfig,"d_path")
+	If @error Then Exit MsgBox ($MB_SYSTEMMODAL,"@error: "&@error,"Auto It can not find d_path in config file")
 	If StringRight ($sDbName,3) <> ".db" Then $sDbName = $sDbName&".db"
-	Local $sDbPathName = $g_aConfig[1]&$sDbName
-	Local $sDllPath = @UserProfileDir&"\AutoIt\sqlite3.dll"
+	Local $sDbPathName = $g_aConfig[$iArraySearch_dpath+1]&$sDbName
+	Local $sDllPath = $g_aConfig[$iArraySearch_dpath+1]&"sqlite3.dll"
+
 	_SQLite_Startup($sDllPath)
 	If @error Then Exit MsgBox($MB_SYSTEMMODAL, "SQLite Error", "SQLite3.dll Can't be Loaded!")
 	_SQLite_Open ($sDbPathName)
@@ -90,6 +95,38 @@ Func __fCreateDB ($sDbName = "autoit.db") ;Create a new DB or check if a existin
 
 EndFunc
 
+Func __fCreateTable ($sTableName = "",$sDbName = "autoit.db")
+
+	If $sTableName = "" Then Return 0
+	Local $iArraySearch_dpath = _ArraySearch ($g_aConfig,"d_path")
+	If @error Then Exit MsgBox ($MB_SYSTEMMODAL,"@error: "&@error,"Auto It can not find d_path in config file")
+	If StringRight ($sDbName,3) <> ".db" Then $sDbName = $sDbName&".db"
+	Local $sDbPathName = $g_aConfig[$iArraySearch_dpath+1]&$sDbName
+	If FileExists ($sDbPathName) = 0 Then
+		MsgBox (0,"Error",$sDbPathName&" - not found")
+		Return 0
+	EndIf
+	Local $sDllPath = $g_aConfig[$iArraySearch_dpath+1]&"sqlite3.dll"
+
+	_SQLite_Startup($sDllPath)
+	If @error Then Exit MsgBox($MB_SYSTEMMODAL, "SQLite Error", "SQLite3.dll Can't be Loaded!")
+	_SQLite_Open ($sDbPathName)
+	If @error Then Exit MsgBox($MB_SYSTEMMODAL, "SQLite Error", "Can't create or open a Database!"&@CRLF&$sDbPathName)
+	$iSQLiteRetun = _SQLite_Exec ( -1, "SELECT * FROM "&$sTableName&" LIMIT 1;")
+	If $iSQLiteRetun = $SQLITE_OK Then
+		MsgBox ($MB_SYSTEMMODAL,"SQLite Error","Table '"&$sTableName&"' already exists in db: "&$sDbPathName)
+	Else
+		$iSQLiteRetun = _SQLite_Exec ( -1, 'CREATE TABLE "'&$sTableName&'" ("id" INTEGER NOT NULL UNIQUE, PRIMARY KEY("id" AUTOINCREMENT));')
+        If $iSQLiteRetun = $SQLITE_OK Then
+			MsgBox (0,"SQLite","Table '"&$sTableName&"' created")
+		Else
+			MsgBox($MB_SYSTEMMODAL, "SQLite Error: " &$iSQLiteRetun,_SQLite_ErrMsg())
+		EndIf
+	EndIf
+	_SQLite_Close ()
+	_SQLite_Shutdown()
+
+EndFunc
 
 
 ;read excel func and csv ; parameter
