@@ -28,54 +28,91 @@ Func __fFileCheck($sDestination = "") ;Check and if needed install dependencies 
 	;sqlite3.dll
 	If FileExists ($sFileTempPath&"sqlite3.dll") = 0 Then
 		If FileExists ($sFileTempPath) = 0 Then
-			$iDirCreate = DirCreate ($sFileTempPath)
-			If $iDirCreate = 0 Then Exit MsgBox ($MB_SYSTEMMODAL,"Error","Auto It can not create directory: "&$sFileTempPath)
+			If DirCreate ($sFileTempPath) = 0 Then Exit MsgBox ($MB_SYSTEMMODAL,"Error","Auto It can not create directory: "&$sFileTempPath)
 		EndIf
-		$iFileInstall = FileInstall (".\dependencies\sqlite3.dll",$sFileTempPath)
-		If $iFileInstall = 0 Then Exit MsgBox ($MB_SYSTEMMODAL,"Error","Auto It can not install sqlite3.dll to: "&$sFileTempPath)
+		If FileInstall (".\dependencies\sqlite3.dll",$sFileTempPath) = 0 Then Exit MsgBox ($MB_SYSTEMMODAL,"Error","Auto It can not install sqlite3.dll to: "&$sFileTempPath)
 	EndIf
 
 	;sqlite3_x64.dll
 	If FileExists ($sFileTempPath&"sqlite3_x64.dll") = 0 Then
-		$iFileInstall = FileInstall (".\dependencies\sqlite3_x64.dll",$sFileTempPath)
-		If $iFileInstall = 0 Then Exit MsgBox ($MB_SYSTEMMODAL,"Error","Auto It can not install sqlite3_x64.dll to: "&$sFileTempPath)
+		If FileInstall (".\dependencies\sqlite3_x64.dll",$sFileTempPath) = 0 Then Exit MsgBox ($MB_SYSTEMMODAL,"Error","Auto It can not install sqlite3_x64.dll to: "&$sFileTempPath)
 	EndIf
 
 	;config
 	If FileExists ($sFileTempPath&"config") = 0 Then
-		$iFileCreate = _FileCreate($sFileTempPath&"config")
+		_FileCreate($sFileTempPath&"config")
 		If @error Then Exit MsgBox ($MB_SYSTEMMODAL,"Error","Auto It can not create config file to: "&$sFileTempPath&@CRLF&"@error: "&@error)
-		FileWrite ($sFileTempPath&"config","d_path"&@CRLF&$sFileTempPath)
-		If @error Then Exit MsgBox ($MB_SYSTEMMODAL,"Error","Auto It can not write in config file : "&$sFileTempPath&@CRLF&"@error: "&@error)
+		If FileWrite ($sFileTempPath&"config","d_path"&@CRLF&$sFileTempPath) = 0 Then Exit MsgBox ($MB_SYSTEMMODAL,"Error","Auto It can not write in config file : "&$sFileTempPath&@CRLF&"@error: "&@error)
+	Else
+		$g_aConfig = FileReadToArray ($sFileTempPath&"config")
+		If @error Then Exit MsgBox ($MB_SYSTEMMODAL,"Error FileReadToArray","Auto It can not read config file")
+		Local $iArraySearch = _ArraySearch ($g_aConfig,"d_path")
+		If @error Then
+			If MsgBox (4,"Warning","Auto It can not find d_path in config file"&@CRLF&"Add ?") = 6 Then
+				If FileWrite ($sFileTempPath&"config",@CRLF&"d_path"&@CRLF&$sFileTempPath) = 0 Then Exit MsgBox ($MB_SYSTEMMODAL,"Error FileWrite","Auto It can not write in config file : "&$sFileTempPath&@CRLF&"@error: "&@error)
+				$g_aConfig = FileReadToArray ($sFileTempPath&"config")
+				If @error Then Exit MsgBox ($MB_SYSTEMMODAL,"Error FileReadToArray","Auto It can not read config file")
+				$iArraySearch = _ArraySearch ($g_aConfig,"d_path")
+				If @error Then Exit MsgBox ($MB_SYSTEMMODAL,"Error _ArraySearch","Unexpected error occurred")
+			Else
+				MsgBox (0,"Warning","Auto It can not proceed without d_path in config file")
+				Exit
+			EndIf
+		EndIf
+		If $g_aConfig[$iArraySearch+1] <> $sFileTempPath Then
+			If MsgBox (4,"Warning","Different d_path in config file"&@CRLF&"Uptade: '"&$g_aConfig[$iArraySearch+1]&"'"&@CRLF&" to '"&$sFileTempPath&"'?") = 6 Then
+				$g_aConfig[$iArraySearch+1] = $sFileTempPath
+				Local $hFileOpen = FileOpen ($sFileTempPath&"config",2)
+				If $hFileOpen = -1 Then Exit MsgBox ($MB_SYSTEMMODAL,"Error FileOpen","Auto It can not write in config file")
+				FileClose($hFileOpen)
+				_FileWriteFromArray ($sFileTempPath&"config",$g_aConfig,Default,Default,@CRLF)
+				If @error Then Exit MsgBox ($MB_SYSTEMMODAL,"Error _FileWriteFromArray","Auto It can not write in config file")
+			Else
+				MsgBox (0,"Warning","Auto It can not proceed mismatch d_path in config file")
+				Exit
+			EndIf
+		EndIf
 	EndIf
 
 	$g_aConfig = FileReadToArray ($sFileTempPath&"config")
+	If @error Then Exit MsgBox ($MB_SYSTEMMODAL,"Error FileReadToArray","Auto It can not read config file")
 
 EndFunc
 
-Func __fFileWriteConfig($sConfig = "",$sConfigValue = "") ; Write to config
+Func __fFileWriteConfig($sConfig = "",$sConfigValue = "") ;Write to config
 
-	If $sConfig = "" Or $sConfigValue = "" Then Return 0
-	Local $iArraySearch_dpath = _ArraySearch ($g_aConfig,"d_path")
-	If @error Then Exit MsgBox ($MB_SYSTEMMODAL,"@error: "&@error,"Auto It can not find d_path in config file")
-
-	$iArraySearch = _ArraySearch ($g_aConfig,$sConfig)
+	If $sConfig = "" Or $sConfigValue = "" Then Return SetError (1,0,-1) ;Empty value
+	Local $iArraySearch = _ArraySearch ($g_aConfig,"d_path")
 	If @error Then
-		FileWrite ($g_aConfig[$iArraySearch_dpath+1]&"config",@CRLF&$sConfig&@CRLF&$sConfigValue)
-		$g_aConfig = FileReadToArray ($g_aConfig[$iArraySearch_dpath+1]&"config")
+		Return SetError (2,0,-1) ;Auto It can not find d_path in config file
+	EndIf
+
+	_ArraySearch ($g_aConfig,$sConfig)
+	If @error Then
+		If FileWrite ($g_aConfig[$iArraySearch+1]&"config",@CRLF&$sConfig&@CRLF&$sConfigValue) = 0 Then
+			Return SetError (3,0,-1) ;Auto It can not write in config file
+		EndIf
+		$g_aConfig = FileReadToArray ($g_aConfig[$iArraySearch+1]&"config")
+		If @error Then
+			Return SetError (4,0,-1) ;Auto It can not read config file
+		EndIf
 		Return 1 ;Success
 	EndIf
-	Return 0 ;Config name already exists
+
+	Return SetError (5,0,-1) ;Config name already exists
 
 EndFunc
 
 Func __fCreateDB ($sDbName = "autoit.db") ;Create a new DB or check if a existing one is working
 
-	Local $iArraySearch_dpath = _ArraySearch ($g_aConfig,"d_path")
-	If @error Then Exit MsgBox ($MB_SYSTEMMODAL,"@error: "&@error,"Auto It can not find d_path in config file")
+	If IsString ($sDbName) = 0 Or $sDbName = "" Then Return SetError (1,0,-1) ;Name is not string
+	Local $iArraySearch = _ArraySearch ($g_aConfig,"d_path")
+	If @error Then
+		Return SetError (2,0,-1) ;Auto It can not find d_path in config file
+	EndIf
 	If StringRight ($sDbName,3) <> ".db" Then $sDbName = $sDbName&".db"
-	Local $sDbPathName = $g_aConfig[$iArraySearch_dpath+1]&$sDbName
-	Local $sDllPath = $g_aConfig[$iArraySearch_dpath+1]&"sqlite3.dll"
+	Local $sDbPathName = $g_aConfig[$iArraySearch+1]&$sDbName
+	Local $sDllPath = $g_aConfig[$iArraySearch+1]&"sqlite3.dll"
 
 	_SQLite_Startup($sDllPath)
 	If @error Then Exit MsgBox($MB_SYSTEMMODAL, "SQLite Error", "SQLite3.dll Can't be Loaded!")
