@@ -10,12 +10,12 @@
 
 ; Script Start - Add your code below here
 #include-once
-#include <MsgBoxConstants.au3>
-#include <File.au3>
 #include <Array.au3>
-#include <SQLite.au3>
 #include <Excel.au3>
-
+#include <File.au3>
+#include <GuiListView.au3>
+#include <MsgBoxConstants.au3>
+#include <SQLite.au3>
 
 Global $g_aConfig
 __fFileCheck()
@@ -220,15 +220,16 @@ Func __fSQLiteExec($sQuery="",$sDbName = "autoit.db")
 	Local $iSQLiteRetun = _SQLite_Exec (-1, $sQuery)
 	_SQLite_Close()
 	_SQLite_Shutdown()
+
 	Return $iSQLiteRetun
 
 EndFunc
 
-Func __fReadExcel ($sExcelPath = "",$sRange = "ALL", $sSheets = 1)
+Func __fReadExcel ($sExcelPath = "",$sRange = "ALL", $iSheets = 1)
 
 	If FileExists ($sExcelPath) = 0 Then Return  SetError (1,0,-1) ;Auto It can not find the file
 	If IsString ($sRange) = 0 Then Return SetError (2,0,-1) ;$sRange is not string
-	If IsInt($sSheets) = 0 Or $sSheets < 1 Then Return SetError (3,0,-1) ;$sSheets is not valid
+	If IsInt($iSheets) = 0 Or $iSheets < 1 Then Return SetError (3,0,-1) ;$iSheets is not valid
 	Local $iClosedBook, $oExcel
 
 	Local $oWorkbook = _Excel_BookAttach ($sExcelPath)
@@ -246,7 +247,7 @@ Func __fReadExcel ($sExcelPath = "",$sRange = "ALL", $sSheets = 1)
 		Return SetError (5,0,-1) ;Error opening workbook
 	EndIf
 	If $sRange = "ALL" Then
-		Local $aResult = _Excel_RangeRead($oWorkbook, Default, $oWorkbook.Sheets($sSheets).Usedrange,Default,True)
+		Local $aResult = _Excel_RangeRead($oWorkbook, Default, $oWorkbook.Sheets($iSheets).Usedrange,Default,True)
 		If @error Then
 			If $iClosedBook = 1 Then _Excel_BookClose ( $oWorkbook, False )
 			If $iClosedBook	= 1 Then _Excel_Close($oExcel)
@@ -254,14 +255,14 @@ Func __fReadExcel ($sExcelPath = "",$sRange = "ALL", $sSheets = 1)
 		EndIf
 	Else
 		If StringRegExp($sRange, "\d+") = 1 Then
-			Local $aResult = _Excel_RangeRead($oWorkbook, Default, $oWorkbook.Sheets($sSheets).Range($sRange),Default,True)
+			Local $aResult = _Excel_RangeRead($oWorkbook, Default, $oWorkbook.Sheets($iSheets).Range($sRange),Default,True)
 			If @error Then
 				If $iClosedBook = 1 Then _Excel_BookClose ( $oWorkbook, False )
 				If $iClosedBook	= 1 Then _Excel_Close($oExcel)
 				Return SetError (6,0,-1) ;Error reading from workbook
 			EndIf
 		Else
-			Local $aResult = _Excel_RangeRead($oWorkbook, Default, $oWorkbook.Sheets($sSheets).Usedrange.Columns($sRange),Default,True)
+			Local $aResult = _Excel_RangeRead($oWorkbook, Default, $oWorkbook.Sheets($iSheets).Usedrange.Columns($sRange),Default,True)
 			If @error Then
 				If $iClosedBook = 1 Then _Excel_BookClose ( $oWorkbook, False )
 				If $iClosedBook	= 1 Then _Excel_Close($oExcel)
@@ -272,29 +273,33 @@ Func __fReadExcel ($sExcelPath = "",$sRange = "ALL", $sSheets = 1)
 	If $iClosedBook = 1 Then _Excel_BookClose ( $oWorkbook, False )
 	If $iClosedBook	= 1 Then _Excel_Close($oExcel)
 
-	_ArrayDisplay($aResult)
+	;_ArrayDisplay($aResult)
 	Return $aResult
 
 EndFunc
 
-Func __fWriteExcel($aArray,$sRange = Default)
+Func __fWriteExcel($aArray,$sRange = Default,$sExcelPath = "",$iSheets = Default)
 
 	If IsString ($sRange) = 0 And $sRange <> Default Then Return SetError (1,0,-1) ;$sRange is not string
-	Local $oExcel = _Excel_Open(), $iClosedExcel = @extended
+	Local $oExcel = _Excel_Open(), $iClosedExcel = @extended, $iClosedBook
 	If @error Then Return SetError (2,0,-1) ;Error creating excel App
-	Local $oWorkbook = _Excel_BookNew($oExcel, 1)
+	Local $oWorkbook = _Excel_BookAttach ($sExcelPath)
 	If @error Then
-		If $iClosedExcel = 1 Then _Excel_Close($oExcel)
-		Return SetError (3,0,-1) ;Error creating workbook
+		$iClosedBook = 1
+		$oWorkbook = _Excel_BookNew($oExcel, 1)
+		If @error Then
+			If $iClosedExcel = 1 Then _Excel_Close($oExcel)
+			Return SetError (3,0,-1) ;Error creating workbook
+		EndIf
 	EndIf
-	_Excel_RangeWrite ( $oWorkbook, 1, $aArray, $sRange, Default, True)
+	_Excel_RangeWrite ( $oWorkbook, $iSheets, $aArray, $sRange, Default, True)
 	If @error Then
-		_Excel_BookClose ( $oWorkbook, False )
+		If $iClosedBook = 1 Then _Excel_BookClose ( $oWorkbook, False )
 		If $iClosedExcel = 1 Then _Excel_Close($oExcel)
 		Return SetError (4,0,-1) ;Error writing to worksheet
 	EndIf
 
-	Return 1
+	Return 1 ;Success
 
 EndFunc
 
@@ -322,7 +327,8 @@ Func __fImportSQLite($sCSVPath,$sDbName = "autoit.db",$sTableName = "temp_temp",
 					&".import '"&$sCSVPath&"' "&$sTableName
 	EndIf
 	Local $hInputFile = FileOpen( $sInput,2)
-	FileWrite($hInputFile,$sQuery)
+	If $hInputFile = -1 Then Return SetError (4,0,-1) ;Can not open file
+	If FileWrite($hInputFile,$sQuery) = 0 Then Return SetError (5,0,-1) ;Can not write file
 	FileClose($hInputFile)
 	Local $sCmd = @ComSpec & ' /c ""' & $g_aConfig[$iArraySearch+1]&'sqlite3.exe"' & '  "' _
 				 & $sDbPathName _
@@ -332,13 +338,118 @@ Func __fImportSQLite($sCSVPath,$sDbName = "autoit.db",$sTableName = "temp_temp",
 	ProcessWaitClose($iPID)
 	Local $sStdout = StdoutRead($iPID)
 	Local $sStderr = StderrRead($iPID)
-	MsgBox(0,@error,"Query:"&@CRLF&$sQuery&@CRLF&"#-------#"&@CRLF&"Cmd: "&@CRLF&$sCmd&@CRLF&"#-------#"&@CRLF&"Stdout: "&$sStdout&@CRLF&"Stderr: "&$sStderr)
+	;MsgBox(0,@error,"Query:"&@CRLF&$sQuery&@CRLF&"#-------#"&@CRLF&"Cmd: "&@CRLF&$sCmd&@CRLF&"#-------#"&@CRLF&"Stdout: "&$sStdout&@CRLF&"Stderr: "&$sStderr)
+	If StringLen($sStderr) > 0 Then Return SetError(6,0,-1);Error
 
 	Return $sStderr
 
 EndFunc
+__fQueryArray(__fReadExcel ("C:\Users\Pedro\AutoIt\dataexport.csv"),"",False)
+Func __fQueryArray($aArray,$sQuery = "", $bHeaders = True)
 
+	If IsArray($aArray) = 0 Then SetError (1,0,-1) ;Is not an array
+	Local $iArraySearch = _ArraySearch ($g_aConfig,"d_path")
+	If @error Then Return SetError (2,0,-1) ;Auto It can not find d_path in config file
+	Local $sInputFile = _TempFile($g_aConfig[$iArraySearch+1]),  $sOutputFile = _TempFile($g_aConfig[$iArraySearch+1]),  $sArrayFile = _TempFile($g_aConfig[$iArraySearch+1])
 
+	If $bHeaders = False Then
+		Local $sColName = ""
+		For $i = 0 To UBound ($aArray,2)-1
+			$sColName = $sColName & "col"&$i&"|"
+		Next
+		$sColName = StringTrimRight ( $sColName,1)
+		_ArrayInsert ($aArray,0,$sColName)
+	EndIf
+	$hArrayFile = FileOpen($sArrayFile, $FO_OVERWRITE)
+	_FileWriteFromArray($hArrayFile,$aArray,Default,Default,";")
+	FileClose($hArrayFile)
+	$hInputFile = FileOpen($sInputFile, $FO_OVERWRITE)
+	$sQuery = ".output stdout"&@CRLF&".headers on"&@CRLF _
+					&".mode csv"&@CRLF&".separator ';'"&@CRLF _
+					&".import '"&$sArrayFile&"' array"&@CRLF&$sQuery
+	FileWrite($hInputFile, $sQuery)
+	FileClose($hInputFile)
+	Local $sCmd = @ComSpec & ' /c ""' & $g_aConfig[$iArraySearch+1]&'sqlite3.exe"' & '  "' _
+				 & '" > "' & $sOutputFile _
+				 & '" < "' & $sInputFile & '""'
+	Local $iPID = Run($sCmd, @WorkingDir, @SW_HIDE, BitOR($STDERR_CHILD, $STDOUT_CHILD))
+	ProcessWaitClose($iPID)
+	Local $sStdout = StdoutRead($iPID)
+	Local $sStderr = StderrRead($iPID)
+	Local $aResult
+	_FileReadToArray($sOutputFile,$aResult,0)
+	FileDelete($sOutputFile)
+	FileDelete($sInputFile)
+	FileDelete($sArrayFile)
+	;MsgBox(0,@error,"Query:"&@CRLF&$sQuery&@CRLF&"#-------#"&@CRLF&"Cmd: "&@CRLF&$sCmd&@CRLF&"#-------#"&@CRLF&"Stdout: "&$sStdout&@CRLF&"Stderr: "&$sStderr)
+	If $bHeaders = False Then _ArrayDelete($aResult,0)
+
+	Return $aResult
+
+EndFunc
+
+Func __fImportListView($hControl,$aArray, $bHeaders = True,$bColFit= True)
+
+	Local $aControlGetPos = ControlGetPos("","",$hControl)
+	If @error Then Return SetError (1,0,-1) ;$hControl not found
+	If IsArray($aArray) = 0 Then SetError (2,0,-1) ;Is not an array
+	If Not $bHeaders = False Then $bHeaders = True
+	If Not $bColFit = False Then $bColFit = True
+	Local $iRow = UBound($aArray)
+	Local $iCol = UBound ($aArray,2)
+	Local $iGetColumnCount = _GUICtrlListView_GetColumnCount ($hControl)
+	Local $iColSize = 0
+
+	_GUICtrlListView_BeginUpdate($hControl)
+	_GUICtrlListView_DeleteAllItems ($hControl)
+	If $iGetColumnCount  > 0 Then
+		For $i = 0 To $iGetColumnCount-1
+			_GUICtrlListView_DeleteColumn ($hControl,$i)
+		Next
+	EndIf
+	If $bColFit = True Then
+		For $i = 0 To $iCol-1
+			$iColSize = $iColSize + StringLen($aArray[0][$i])*15+1
+		Next
+	EndIf
+	If $bHeaders = True Then
+		For $i = 0 To $iCol-1
+			If $bColFit = True Then
+				If $iColSize > $aControlGetPos[2] Then
+					_GUICtrlListView_AddColumn($hControl, $aArray[0][$i], ($aControlGetPos[2]-20)/$iCol)
+				Else
+					_GUICtrlListView_AddColumn($hControl, $aArray[0][$i], StringLen($aArray[0][$i])*15+1)
+				EndIf
+			Else
+				_GUICtrlListView_AddColumn($hControl, $aArray[0][$i], StringLen($aArray[0][$i])*15+1)
+			EndIf
+		Next
+	Else
+		For $i = 0 To $iCol-1
+			If $bColFit = True Then
+				If $iColSize > $aControlGetPos[2] Then
+					_GUICtrlListView_AddColumn($hControl, "Column "&$i, ($aControlGetPos[2]-20)/$iCol)
+				Else
+					_GUICtrlListView_AddColumn($hControl, "Column "&$i, StringLen($aArray[0][$i])*15+1)
+				EndIf
+			Else
+				_GUICtrlListView_AddColumn($hControl, "Column "&$i, StringLen($aArray[0][$i])*15+1)
+			EndIf
+		Next
+	EndIf
+	If $bHeaders = True Then
+		_GUICtrlListView_SetItemCount($hControl, $iRow-1)
+		_ArrayDelete($aArray,0)
+		_GUICtrlListView_AddArray($hControl, $aArray)
+	Else
+		_GUICtrlListView_SetItemCount($hControl, $iRow)
+		_GUICtrlListView_AddArray($hControl, $aArray)
+	EndIf
+	_GUICtrlListView_EndUpdate($hControl)
+
+	Return 1
+
+EndFunc
 
 
 
