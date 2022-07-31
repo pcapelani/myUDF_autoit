@@ -344,7 +344,7 @@ Func __fImportSQLite($sCSVPath,$sDbName = "autoit.db",$sTableName = "temp_temp",
 	Return $sStderr
 
 EndFunc
-__fQueryArray(__fReadExcel ("C:\Users\Pedro\AutoIt\dataexport.csv"),"",False)
+;__fQueryArray(__fReadExcel ("C:\Users\Pedro\AutoIt\dataexport.csv"),"",False)
 Func __fQueryArray($aArray,$sQuery = "", $bHeaders = True)
 
 	If IsArray($aArray) = 0 Then SetError (1,0,-1) ;Is not an array
@@ -376,8 +376,19 @@ Func __fQueryArray($aArray,$sQuery = "", $bHeaders = True)
 	ProcessWaitClose($iPID)
 	Local $sStdout = StdoutRead($iPID)
 	Local $sStderr = StderrRead($iPID)
+
+	Local $sFileRead = FileRead($sOutputFile)
+	MsgBox (0,"",$sFileRead)
+	$sFileRead = StringReplace($sFileRead, '"', '')
+	FileDelete($sOutputFile)
+	FileWrite($sOutputFile, $sFileRead)
 	Local $aResult
-	_FileReadToArray($sOutputFile,$aResult,0)
+	;If UBound($aArray,0) = 1 Then _FileReadToArray($sOutputFile,$aResult,0)
+	If UBound($aArray,0) = 2 And StringInStr($sFileRead,';') > 0 Then
+		_FileReadToArray($sOutputFile,$aResult,0,";")
+	Else
+		_FileReadToArray($sOutputFile,$aResult,0)
+	EndIf
 	FileDelete($sOutputFile)
 	FileDelete($sInputFile)
 	FileDelete($sArrayFile)
@@ -390,6 +401,8 @@ EndFunc
 
 Func __fImportListView($hControl,$aArray, $bHeaders = True,$bColFit= True)
 
+	$hControl = GUICtrlGetHandle($hControl)
+	If $hControl = 0 Then SetError (1,0,-1) ;$hControl not found
 	Local $aControlGetPos = ControlGetPos("","",$hControl)
 	If @error Then Return SetError (1,0,-1) ;$hControl not found
 	If IsArray($aArray) = 0 Then SetError (2,0,-1) ;Is not an array
@@ -403,7 +416,7 @@ Func __fImportListView($hControl,$aArray, $bHeaders = True,$bColFit= True)
 	_GUICtrlListView_BeginUpdate($hControl)
 	_GUICtrlListView_DeleteAllItems ($hControl)
 	If $iGetColumnCount  > 0 Then
-		For $i = 0 To $iGetColumnCount-1
+		For $i = ($iGetColumnCount-1) To 0 Step -1
 			_GUICtrlListView_DeleteColumn ($hControl,$i)
 		Next
 	EndIf
@@ -451,8 +464,39 @@ Func __fImportListView($hControl,$aArray, $bHeaders = True,$bColFit= True)
 
 EndFunc
 
+Func __fStringFormatArray($aArray,$sFormatControl = "", $bHeaders = True,$iColIndex = 0)
 
+	If IsArray($aArray) = 0 Then SetError (1,0,-1) ;Is not an array
+	If Not $bHeaders = False Then $bHeaders = True
+	If IsInt ($iColIndex) = 0 Or $iColIndex < 0 Then SetError (2,0,-1) ;Is not int
+	Local $iRow = UBound($aArray)
+	Local $iCol = UBound ($aArray,2)
 
+	If $iCol = 0 Then
+		If $bHeaders = True Then
+			For $i = 1 To $iRow-1
+				$aArray[$i] = StringFormat($sFormatControl,$aArray[$i])
+			Next
+		ElseIf $bHeaders = False Then
+			For $i = 0 To $iRow-1
+				$aArray[$i] = StringFormat($sFormatControl,$aArray[$i])
+			Next
+		EndIf
+	ElseIf $iCol > 0 Then
+		If $bHeaders = True Then
+			For $i = 1 To $iRow-1
+				$aArray[$i][$iColIndex] = StringFormat($sFormatControl,$aArray[$i][$iColIndex])
+			Next
+		ElseIf $bHeaders = False Then
+			For $i = 0 To $iRow-1
+				$aArray[$i][$iColIndex] = StringFormat($sFormatControl,$aArray[$i][$iColIndex])
+			Next
+		EndIf
+	EndIf
+
+	Return $aArray
+
+EndFunc
 
 
 
